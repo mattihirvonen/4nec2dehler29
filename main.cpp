@@ -9,8 +9,11 @@
 using namespace std;
 #endif // 1
 
-#define MAXWIRES 512
+// Simulation model default minimum frequency [MHz]
+// (for segment minimum length calculation)
+#define MINFREQ   3.0
 
+#define MAXWIRES  512
 
 typedef struct
 {
@@ -151,7 +154,8 @@ float scale( int value )
 }
 
 
-void export_nec_radiator( float start_freq )
+// Argument "minFrequency" is lowest simulation frequency (minimum serment length calculation)
+void export_nec_radiator( float minFrequency )
 {
     float radiator_len = 9.8;
 
@@ -160,24 +164,24 @@ void export_nec_radiator( float start_freq )
     printf("CM ...here\n");
     printf("CE\n");
 
-    printf("SY freq=7.000\n");
-    printf("SY WL=299.8/freq, M=WL/999	'Minimal NEC segment length\n");
+    printf("SY minFrequency=%5.3f\n",minFrequency);
+    printf("SY WL=299.8/minFrequency, M=WL/999	'NEC segment minimum length\n");
 
-    printf("SY len=%06.3f  'Radiator length\n", radiator_len);
-    printf("SY fph=1.500   'Feed point height\n");
+    printf("SY len=%5.3f  'Radiator length\n", radiator_len);
+    printf("SY fph=1.500  'Feed point height\n");
 
-    printf("GW	1	3	0.700	0	fph	0.700	0	fph+3*M	0.0012941	'Short wire for excitation source\n");
-    printf("GW	2	70	0.700	0	fph+3*M	0	2.500	fph+len	0.0012941	'Rest of radiatior\n");
+    printf("GW	1	3	0.700	0	fph     0.700	0	    fph+3*M	  0.0012941	'Short wire for excitation source\n");
+    printf("GW	2	70	0.700	0	fph+3*M	0	    2.500	fph+len	  0.0012941	'Rest of radiatior\n");
 }
 
 
-// Argument "start_freq" is lowes simulatio frequency
-void export_nec( wirelist_t *wirelist, float start_freq )
+// Argument "minFrequency" is lowest simulation frequency (minimum serment length calculation)
+void export_nec( wirelist_t *wirelist, float minFrequency )
 {
     wire_t *wire = &wirelist->wire[0];
 
     float rail_thikness = 0.0040;
-    float min_seglen    = (299.8/start_freq) / 999.0;
+    float min_seglen    = (299.8/minFrequency) / 999.0;
 
     // Rails
     int  i;
@@ -187,13 +191,16 @@ void export_nec( wirelist_t *wirelist, float start_freq )
         float dy = scale(wire->ep1.y) - scale(wire->ep2.y);
         float dz = scale(wire->ep1.z) - scale(wire->ep2.z);
 
+        // Maximize segment count
         float wirelen  = sqrtf( dx*dx + dy*dy + dz*dz );
         int   segments = wirelen / min_seglen;
         int   tag_id   = 0;
 
+        #if 0
         // Make segment count odd value
         if ((segments &  1) == 0)
              segments -= 1;
+        #endif
 
         printf("GW\t%d\t%2d\t%5.3f\t%5.3f\t%5.3f\t%5.3f\t%5.3f\t%5.3f\t%7.5f\n",
                tag_id, segments,
@@ -205,13 +212,25 @@ void export_nec( wirelist_t *wirelist, float start_freq )
 
 //------------------------------------------------------------------------------
 
-int main()
+int main( int argc, char *argv[] )
 {
+    // Simulation minimum frequency for segment length calculation
+    float minfreq = MINFREQ;
+
+    if (argc > 1)
+    {
+        float freq1 = atof( argv[1] ); // atof()/strtof()
+        if (freq1 > 0.5) {
+            minfreq = freq1;
+        }
+    }
+
     set_rails( 1, 150 );
 
-    export_nec_radiator( 3.000 );
-    export_nec( &rails,  3.000 );
-    export_nec( &mast,   3.000 );
+    export_nec_radiator( minfreq );
+    export_nec( &rails,  minfreq );
+    export_nec( &mast,   minfreq );
+//    export_nec_exitation();
 
     return 0;
 }
